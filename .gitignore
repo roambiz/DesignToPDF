@@ -1,6 +1,9 @@
 .venv/
 .venv38/
 .wheels38/
+env
+.env
+.env.*
 __pycache__/
 *.py[cod]
 build/
