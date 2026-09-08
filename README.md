@@ -1,0 +1,81 @@
+# 设计底稿导出（DesignToPDF）
+
+当前版本 **1.1.0**。把 AI、PSD、PDF 等设计源文件转成 PDF / PNG / JPEG **预览底稿**，给装不了 Photoshop、Illustrator 的电脑用来看稿、传阅。
+
+导出的是方便查看的画面，不是可继续编辑的源文件。
+
+适用于 **64 位 Windows 7 SP1 至 Windows 11**。32 位系统不支持。
+
+由 [lazysci.com 懒研科技](https://lazysci.com) 制作。
+
+---
+
+## 懒研科技
+
+[lazysci.com](https://lazysci.com) 是懒研科技的站点。我们做给真实工作场景用的小工具：旧电脑、微信传文件、不会装运行库的同事，也要能打开就用。
+
+这个仓库是其中一款桌面工具。问题记录见 [开发日志](开发日志.md)。
+
+---
+
+## 给同事怎么用
+
+1. 只要一个 `设计底稿导出.exe`（单文件，不要拆开）
+2. **先保存到桌面再双击**，不要在微信聊天里直接打开
+3. 把设计文件拖进窗口，选输出文件夹，点「导出」
+
+支持：AI、EPS、PS、PSD、SVG、PDF、INDD、CDR、Sketch、XD、Affinity，以及 PNG / JPG / TIFF 等位图。多页可按页拆开。
+
+部分电脑第一次打开会慢一些，窗口出来之后即可拖文件。
+
+---
+
+## 从源码运行
+
+发布用的通用包必须用 **Python 3.8 + PySide2**（`.venv38`），不要用本机较新的 Python / PySide6 打给 Win7。
+
+```bat
+打包成EXE.bat
+```
+
+完成后：`发布\设计底稿导出-1.1.0\设计底稿导出.exe`
+
+本机开发（Win10+，可用 PySide6）：
+
+```bat
+启动转换.bat
+```
+
+或：
+
+```text
+python -m pip install -r requirements.txt
+python app.py
+```
+
+命令行：
+
+```text
+python app.py --cli --help
+```
+
+---
+
+## 仓库里有什么
+
+| 文件 | 说明 |
+| --- | --- |
+| `app.py` | 窗口 |
+| `convert.py` | 转换 |
+| `source_scan.py` | 扫文件、临时路径防护 |
+| `qt_compat.py` | PySide6 / PySide2 兼容 |
+| `brand.py` | 名称、版本、使用说明 |
+| `DesignToPDF.spec` | PyInstaller 单文件打包 |
+| `requirements-win7.txt` | Win7–Win11 发布依赖 |
+| `开发日志.md` | 做到 1.1.0 为止遇到的问题 |
+
+不提交虚拟环境、`build`、`dist` 和打好的 `发布` 目录。
+
+---
+
+Copyright © 2026 [lazysci.com](https://lazysci.com) 懒研科技

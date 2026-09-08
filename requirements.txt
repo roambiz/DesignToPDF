@@ -1,0 +1,7 @@
+# Win10+ 本地开发（PySide6）。发布 Win7–Win11 通用包请用 requirements-win7.txt 和 打包成EXE.bat。
+pillow>=9.2.0
+svglib>=1.5.1
+reportlab>=3.6.13
+PyMuPDF>=1.24.0
+PySide6>=6.6.0
+pyinstaller>=6.3.0

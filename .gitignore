@@ -1,0 +1,11 @@
+.venv/
+.venv38/
+.wheels38/
+__pycache__/
+*.py[cod]
+build/
+dist/
+发布/
+待转换/
+导出结果/
+*.spec.bak
