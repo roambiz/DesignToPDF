@@ -2,7 +2,7 @@
 
 目标不是还原可编辑源文件，而是在装不了 AI / PS 的电脑上预览画面。
 
-设计底稿导出 1.1.0
+设计底稿导出 1.2.0
 Copyright © 2026 lazysci.com 懒研科技
 """
 
@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import io
 import mmap
+import os
 import shutil
 import struct
 import subprocess
@@ -28,6 +29,8 @@ from source_scan import (
     collect_batch_sources,
     expand_sources,
     iter_source_files,
+    wait_readable,
+    win_long_path,
 )
 
 try:
@@ -188,17 +191,18 @@ def extract_embedded_pdf_bytes(data: bytes) -> Optional[bytes]:
 
 
 def read_prefix(path: Path, limit: int = MAX_PREVIEW_SCAN) -> bytes:
-    with path.open("rb") as fh:
+    with open(win_long_path(path), "rb") as fh:
         return fh.read(limit)
 
 
 def extract_embedded_pdf_from_file(path: Path) -> Optional[bytes]:
-    size = path.stat().st_size
+    size = os.path.getsize(win_long_path(path))
     if size == 0:
         return None
     if size <= MAX_PREVIEW_SCAN:
-        return extract_embedded_pdf_bytes(path.read_bytes())
-    with path.open("rb") as fh:
+        with open(win_long_path(path), "rb") as fh:
+            return extract_embedded_pdf_bytes(fh.read())
+    with open(win_long_path(path), "rb") as fh:
         mapped = mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)
         try:
             start = mapped.find(PDF_MAGIC)
@@ -249,7 +253,7 @@ def convert_with_pdf_payload(payload: bytes, pdf_path: Path, method: str) -> Con
 
 def convert_raster(path: Path, pdf_path: Path) -> ConvertResult:
     frames: List[Image.Image] = []
-    with Image.open(path) as image:
+    with Image.open(win_long_path(path)) as image:
         try:
             index = 0
             while True:
@@ -266,7 +270,7 @@ def convert_raster(path: Path, pdf_path: Path) -> ConvertResult:
 
 def convert_pdf(path: Path, pdf_path: Path) -> ConvertResult:
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(path, pdf_path)
+    shutil.copy2(win_long_path(path), win_long_path(pdf_path))
     return ConvertResult("copy")
 
 
@@ -425,9 +429,13 @@ def _parse_psd_merged_image(buf: bytes) -> Optional[Image.Image]:
 
 
 def convert_psd(path: Path, pdf_path: Path) -> ConvertResult:
-    size = path.stat().st_size
+    size = os.path.getsize(win_long_path(path))
     large = size > 80 * 1024 * 1024
-    data = read_prefix(path, 16 * 1024 * 1024) if large else path.read_bytes()
+    if large:
+        data = read_prefix(path, 16 * 1024 * 1024)
+    else:
+        with open(win_long_path(path), "rb") as fh:
+            data = fh.read()
     if not large:
         merged = read_psd_merged_image(data)
         if merged is not None:
@@ -446,7 +454,7 @@ def convert_psd(path: Path, pdf_path: Path) -> ConvertResult:
 
 
 def extract_eps_preview(path: Path) -> Optional[bytes]:
-    with path.open("rb") as fh:
+    with open(win_long_path(path), "rb") as fh:
         header = fh.read(32)
         if not header.startswith(EPS_BINARY_MAGIC) or len(header) < 32:
             return None
@@ -557,7 +565,7 @@ def convert_ai_like(path: Path, pdf_path: Path) -> ConvertResult:
 def convert_svg(path: Path, pdf_path: Path) -> ConvertResult:
     if renderPDF is None or svg2rlg is None:
         raise RuntimeError("转换 SVG 需要安装 svglib 和 reportlab")
-    drawing = svg2rlg(str(path))
+    drawing = svg2rlg(win_long_path(path))
     if drawing is None:
         raise RuntimeError("SVG 解析失败")
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -566,9 +574,10 @@ def convert_svg(path: Path, pdf_path: Path) -> ConvertResult:
 
 
 def _zip_first_image(path: Path, candidates: Sequence[str]) -> Optional[bytes]:
-    if not zipfile.is_zipfile(path):
+    opened = win_long_path(path)
+    if not zipfile.is_zipfile(opened):
         return None
-    with zipfile.ZipFile(path) as zf:
+    with zipfile.ZipFile(opened) as zf:
         names = zf.namelist()
         lower_map = {name.lower(): name for name in names}
         for candidate in candidates:
@@ -909,15 +918,35 @@ def convert_sources(
     outbox.mkdir(parents=True, exist_ok=True)
     used_lower: Set[str] = set()
     batch = BatchResult(last_output_dir=outbox)
+    if not files and sources:
+        total = len(sources)
+        for index, raw in enumerate(sources, start=1):
+            src = Path(raw)
+            batch.failed += 1
+            batch.handled.append(src)
+            if progress:
+                progress(
+                    index,
+                    total,
+                    src,
+                    f"失败 {src.name}  源文件读不到，请先解压到桌面后再导出",
+                )
+        return batch
     total = len(files)
     for index, src in enumerate(files, start=1):
         if should_stop and should_stop():
             break
-        if not src.is_file():
+        readable, _retried = wait_readable(src, tries=8, delay=0.25)
+        if not readable:
             batch.failed += 1
             batch.handled.append(src)
             if progress:
-                progress(index, total, src, f"失败 {src.name}  源文件已不存在或无法访问")
+                progress(
+                    index,
+                    total,
+                    src,
+                    f"失败 {src.name}  电脑较卡或文件还在写入，请稍后再试或先复制到桌面",
+                )
             continue
         dest = unique_output_path(src, outbox, used_lower, export_kind.suffix)
         if dest.exists() and not force:

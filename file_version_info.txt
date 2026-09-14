@@ -1,8 +1,8 @@
 # UTF-8
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(1, 1, 0, 0),
-        prodvers=(1, 1, 0, 0),
+        filevers=(1, 2, 0, 0),
+        prodvers=(1, 2, 0, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,
@@ -18,12 +18,12 @@ VSVersionInfo(
                     [
                         StringStruct("CompanyName", "懒研科技"),
                         StringStruct("FileDescription", "设计底稿导出"),
-                        StringStruct("FileVersion", "1.1.0"),
+                        StringStruct("FileVersion", "1.2.0"),
                         StringStruct("InternalName", "DesignToPDF"),
                         StringStruct("LegalCopyright", "Copyright © 2026 lazysci.com 懒研科技"),
                         StringStruct("OriginalFilename", "DesignToPDF.exe"),
                         StringStruct("ProductName", "设计底稿导出"),
-                        StringStruct("ProductVersion", "1.1.0"),
+                        StringStruct("ProductVersion", "1.2.0"),
                     ],
                 )
             ]

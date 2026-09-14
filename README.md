@@ -1,6 +1,6 @@
 # 设计底稿导出（DesignToPDF）
 
-当前版本 **1.1.0**。把 AI、PSD、PDF 等设计源文件转成 PDF / PNG / JPEG **预览底稿**，给装不了 Photoshop、Illustrator 的电脑用来看稿、传阅。
+当前版本 **1.2.0**。把 AI、PSD、PDF 等设计源文件转成 PDF / PNG / JPEG **预览底稿**，给装不了 Photoshop、Illustrator 的电脑用来看稿、传阅。
 
 导出的是方便查看的画面，不是可继续编辑的源文件。
 
@@ -20,9 +20,11 @@
 
 ## 给同事怎么用
 
-1. 只要一个 `设计底稿导出.exe`（单文件，不要拆开）
-2. **先保存到桌面再双击**，不要在微信聊天里直接打开
-3. 把设计文件拖进窗口，选输出文件夹，点「导出」
+微信里请发压缩包 `设计底稿导出-1.2.0.zip`，不要直接发 exe。手机微信对 exe 只显示问号，也更容易被拦截。
+
+1. 把压缩包保存到桌面并解压
+2. 双击 `设计底稿导出.exe`（不要在微信里直接打开）
+3. 把设计文件、文件夹或 zip 拖进窗口，选输出文件夹，点「导出」。从压缩软件预览窗口拖入不如先解压到桌面稳。
 
 支持：AI、EPS、PS、PSD、SVG、PDF、INDD、CDR、Sketch、XD、Affinity，以及 PNG / JPG / TIFF 等位图。多页可按页拆开。
 
@@ -38,7 +40,7 @@
 打包成EXE.bat
 ```
 
-完成后：`发布\设计底稿导出-1.1.0\设计底稿导出.exe`
+完成后：`发布\设计底稿导出-1.2.0\设计底稿导出.exe`
 
 本机开发（Win10+，可用 PySide6）：
 
@@ -67,12 +69,12 @@ python app.py --cli --help
 | --- | --- |
 | `app.py` | 窗口 |
 | `convert.py` | 转换 |
-| `source_scan.py` | 扫文件、临时路径防护 |
+| `source_scan.py` | 扫文件、zip / 预览拖入、临时路径防护 |
 | `qt_compat.py` | PySide6 / PySide2 兼容 |
 | `brand.py` | 名称、版本、使用说明 |
 | `DesignToPDF.spec` | PyInstaller 单文件打包 |
 | `requirements-win7.txt` | Win7–Win11 发布依赖 |
-| `开发日志.md` | 做到 1.1.0 为止遇到的问题 |
+| `开发日志.md` | 做到 1.2.0 为止遇到的问题 |
 
 不提交虚拟环境、`build`、`dist` 和打好的 `发布` 目录。
 

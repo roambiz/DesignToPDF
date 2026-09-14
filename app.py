@@ -1,4 +1,4 @@
-"""设计底稿导出 1.1.0
+"""设计底稿导出 1.2.0
 
 Copyright © 2026 lazysci.com 懒研科技
 """
@@ -80,9 +80,10 @@ from brand import (
 from export_kind import ExportKind
 from source_scan import (
     clean_path_text,
-    expand_sources,
     is_ephemeral_path,
+    is_unstable_output,
     path_key,
+    prepare_sources,
     suggest_output_dir,
     user_desktop,
 )
@@ -154,7 +155,8 @@ class ConvertWorker(QObject):
             self.finished.emit(batch.ok, batch.skipped, batch.failed, handled, last_dir)
         except Exception as exc:
             self.progressed.emit(0, 1, f"任务异常: {exc}")
-            self.finished.emit(0, 0, 1, [], str(self._outdir))
+            handled = [str(path) for path in self._sources]
+            self.finished.emit(0, 0, 1, handled, str(self._outdir))
 
 
 class DropZone(QFrame):
@@ -165,17 +167,29 @@ class DropZone(QFrame):
         self._hover = False
         layout = QVBoxLayout(self)
         layout.setAlignment(AlignCenter)
+        self._recognizing = False
         self.title = QLabel("把文件拖到这里")
         self.title.setObjectName("dropTitle")
         self.title.setAlignment(AlignCenter)
-        self.hint = QLabel("AI / PSD / EPS / INDD 文件会自动识别")
+        self.hint = QLabel("AI / PSD / zip 会自动识别。先解压到桌面更稳")
         self.hint.setObjectName("dropHint")
         self.hint.setAlignment(AlignCenter)
         self.hint.setWordWrap(True)
         layout.addWidget(self.title)
         layout.addWidget(self.hint)
 
+    def set_recognizing(self, busy: bool) -> None:
+        self._recognizing = busy
+        if busy:
+            self._hover = False
+            self.title.setText("正在识别…")
+        else:
+            self.title.setText("把文件拖到这里")
+        self.update()
+
     def set_hover(self, hover: bool) -> None:
+        if self._recognizing:
+            return
         self._hover = hover
         self.title.setText("松开即可加入队列" if hover else "把文件拖到这里")
         self.update()
@@ -287,6 +301,7 @@ class MainWindow(QMainWindow):
         self._thread: Optional[QThread] = None
         self._worker: Optional[ConvertWorker] = None
         self._busy = False
+        self._recognizing = False
         self._last_output_dir: Optional[Path] = None
         self._run_outdir: Optional[Path] = None
         self._run_open_after = False
@@ -466,7 +481,7 @@ class MainWindow(QMainWindow):
 
     def _pick_output(self) -> None:
         current = clean_path_text(self.out_edit.text())
-        if current and not is_ephemeral_path(Path(current)):
+        if current and not is_unstable_output(Path(current)):
             start = current
         else:
             start = str(user_desktop())
@@ -496,7 +511,7 @@ class MainWindow(QMainWindow):
         text = clean_path_text(self.out_edit.text())
         if text:
             folder = Path(text)
-            if folder.is_dir() and not is_ephemeral_path(folder):
+            if folder.is_dir() and not is_unstable_output(folder):
                 self._settings.setValue("output_dir", str(folder))
             else:
                 self._settings.remove("output_dir")
@@ -513,7 +528,7 @@ class MainWindow(QMainWindow):
         if not remembering:
             return
         saved = clean_path_text(str(self._settings.value("output_dir", "") or ""))
-        if saved and Path(saved).is_dir() and not is_ephemeral_path(Path(saved)):
+        if saved and Path(saved).is_dir() and not is_unstable_output(Path(saved)):
             self.out_edit.setText(saved)
         elif saved:
             self._settings.remove("output_dir")
@@ -531,29 +546,46 @@ class MainWindow(QMainWindow):
         if self._busy:
             self._append_log("正在导出，请等待结束后再加入文件")
             return
-        added = expand_sources(paths, recursive=True)
-        if not added:
-            self._append_log("没有支持的设计文件")
+        if self._recognizing:
+            self._append_log("正在识别，请稍后再加入文件")
             return
-        existing = {path_key(path) for path in self._paths}
-        new_items = [path for path in added if path_key(path) not in existing]
-        if not new_items:
-            self._append_log("这些文件已经在队列里")
-            return
-        self._paths.extend(new_items)
-        if not clean_path_text(self.out_edit.text()):
-            suggested = suggest_output_dir(new_items)
-            self.out_edit.setText(str(suggested))
-            if any(is_ephemeral_path(path) for path in new_items):
-                self._append_log("文件来自聊天或临时目录，输出已放到桌面「导出结果」，避免微信清理后找不到")
-        for path in new_items:
-            self._append_log(f"加入  {path.name}")
-        self._append_log(f"当前队列 {len(self._paths)} 个文件")
+        self._recognizing = True
+        self.drop_zone.set_recognizing(True)
         self._update_queue_label()
+        self._append_log("正在识别拖入的文件…")
+        QApplication.processEvents()
+        try:
+            prepared = prepare_sources(paths, recursive=True)
+            for note in prepared.notes:
+                self._append_log(note)
+            added = prepared.files
+            if not added:
+                if not prepared.notes:
+                    self._append_log("没有支持的设计文件")
+                return
+            existing = {path_key(path) for path in self._paths}
+            new_items = [path for path in added if path_key(path) not in existing]
+            if not new_items:
+                self._append_log("这些文件已经在队列里")
+                return
+            self._paths.extend(new_items)
+            if not clean_path_text(self.out_edit.text()):
+                suggested = suggest_output_dir(paths)
+                self.out_edit.setText(str(suggested))
+                if any(is_ephemeral_path(path) for path in paths):
+                    self._append_log("文件来自聊天或临时目录，输出已放到桌面「导出结果」，避免微信清理后找不到")
+            for path in new_items:
+                self._append_log(f"加入  {path.name}")
+            self._append_log(f"当前队列 {len(self._paths)} 个文件")
+            self._update_queue_label()
+        finally:
+            self._recognizing = False
+            self.drop_zone.set_recognizing(False)
+            self._update_queue_label()
 
     def _clear_files(self) -> None:
-        if self._busy:
-            self._append_log("正在导出，无法清空队列")
+        if self._busy or self._recognizing:
+            self._append_log("正在处理，无法清空队列")
             return
         self._paths = []
         self._append_log("已清空队列")
@@ -568,13 +600,13 @@ class MainWindow(QMainWindow):
             self.queue_label.setText(f"日志 · 队列 {count} 个文件")
         else:
             self.queue_label.setText("日志")
-        self.start_btn.setEnabled(count > 0 and not self._busy)
+        self.start_btn.setEnabled(count > 0 and not self._busy and not self._recognizing)
 
     def _append_log(self, message: str) -> None:
         self.log.append(message)
 
     def _start(self) -> None:
-        if self._busy or self._thread is not None:
+        if self._busy or self._recognizing or self._thread is not None:
             return
         if not self._paths:
             self._append_log("请先把设计文件拖进窗口")
@@ -585,7 +617,7 @@ class MainWindow(QMainWindow):
                 self._append_log("还没有选择输出文件夹")
                 return
         outdir = Path(clean_path_text(self.out_edit.text()))
-        if is_ephemeral_path(outdir):
+        if is_unstable_output(outdir):
             outdir = user_desktop() / "导出结果"
             self.out_edit.setText(str(outdir))
             self._append_log("原输出位置不稳定（聊天缓存或临时目录），已改到桌面「导出结果」")
@@ -736,6 +768,9 @@ class MainWindow(QMainWindow):
             self._append_log(f"无法打开文件夹: {chosen}")
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self._recognizing:
+            event.ignore()
+            return
         self._stop_event.set()
         if self._thread is not None:
             deadline = time.monotonic() + 30.0
