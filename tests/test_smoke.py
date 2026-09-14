@@ -29,7 +29,7 @@ from source_scan import (
 
 class SmokeTests(unittest.TestCase):
     def test_brand_constants(self) -> None:
-        self.assertEqual(VERSION, "1.2.0")
+        self.assertEqual(VERSION, "1.2.1")
         self.assertIn("底稿", APP_NAME)
 
     def test_supported_extensions(self) -> None:

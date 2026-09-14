@@ -1,4 +1,4 @@
-"""设计底稿导出 1.2.0
+"""设计底稿导出 1.2.1
 
 Copyright © 2026 lazysci.com 懒研科技
 """
@@ -110,6 +110,18 @@ def app_icon() -> QIcon:
     return QIcon()
 
 
+class WarmupWorker(QObject):
+    finished = Signal()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            import convert  # noqa: F401
+        except Exception:
+            pass
+        self.finished.emit()
+
+
 class ConvertWorker(QObject):
     progressed = Signal(int, int, str)
     finished = Signal(int, int, int, list, str)
@@ -168,6 +180,7 @@ class DropZone(QFrame):
         layout = QVBoxLayout(self)
         layout.setAlignment(AlignCenter)
         self._recognizing = False
+        self._preparing = False
         self.title = QLabel("把文件拖到这里")
         self.title.setObjectName("dropTitle")
         self.title.setAlignment(AlignCenter)
@@ -178,21 +191,34 @@ class DropZone(QFrame):
         layout.addWidget(self.title)
         layout.addWidget(self.hint)
 
+    def set_preparing(self, busy: bool) -> None:
+        self._preparing = busy
+        if busy:
+            self._hover = False
+        self._sync_title()
+
     def set_recognizing(self, busy: bool) -> None:
         self._recognizing = busy
         if busy:
             self._hover = False
+        self._sync_title()
+
+    def _sync_title(self) -> None:
+        if self._preparing:
+            self.title.setText("正在加载，请稍候…")
+        elif self._recognizing:
             self.title.setText("正在识别…")
+        elif self._hover:
+            self.title.setText("松开即可加入队列")
         else:
             self.title.setText("把文件拖到这里")
         self.update()
 
     def set_hover(self, hover: bool) -> None:
-        if self._recognizing:
+        if self._preparing or self._recognizing:
             return
         self._hover = hover
-        self.title.setText("松开即可加入队列" if hover else "把文件拖到这里")
-        self.update()
+        self._sync_title()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         del event
@@ -302,14 +328,70 @@ class MainWindow(QMainWindow):
         self._worker: Optional[ConvertWorker] = None
         self._busy = False
         self._recognizing = False
+        self._warming_up = False
+        self._warmup_thread: Optional[QThread] = None
+        self._warmup_worker: Optional[WarmupWorker] = None
         self._last_output_dir: Optional[Path] = None
         self._run_outdir: Optional[Path] = None
         self._run_open_after = False
 
         self._build()
+        self._update_queue_label()
+
+    def finish_startup(self) -> None:
         self._restore_prefs()
         self._update_queue_label()
         self._update_open_btn()
+
+    def begin_engine_warmup(self) -> None:
+        if self._warmup_thread is not None:
+            return
+        self._warming_up = True
+        self._set_preparing_ui(True)
+        self._append_log("正在加载转换组件，请稍候…")
+        self.progress.setRange(0, 0)
+        self.progress.setFormat("准备中…")
+        self.progress.setTextVisible(True)
+
+        self._warmup_thread = QThread()
+        self._warmup_worker = WarmupWorker()
+        self._warmup_worker.moveToThread(self._warmup_thread)
+        self._warmup_thread.started.connect(self._warmup_worker.run)
+        self._warmup_worker.finished.connect(self._on_warmup_finished)
+        self._warmup_worker.finished.connect(self._warmup_thread.quit)
+        self._warmup_thread.finished.connect(self._warmup_worker.deleteLater)
+        self._warmup_thread.finished.connect(self._warmup_thread.deleteLater)
+        self._warmup_thread.finished.connect(self._cleanup_warmup_thread)
+        self._warmup_thread.start()
+
+    def _on_warmup_finished(self) -> None:
+        self._warming_up = False
+        self._set_preparing_ui(False)
+        self._reset_progress_idle()
+        self._append_log("加载完成，可以拖入文件。")
+        self._update_queue_label()
+
+    def _cleanup_warmup_thread(self) -> None:
+        self._warmup_thread = None
+        self._warmup_worker = None
+
+    def _set_preparing_ui(self, busy: bool) -> None:
+        self.drop_zone.set_preparing(busy)
+        if busy:
+            self.setAcceptDrops(False)
+            self.drop_zone.setEnabled(False)
+            self.start_btn.setEnabled(False)
+            self.clear_btn.setEnabled(False)
+        else:
+            self.setAcceptDrops(not self._busy)
+            self.drop_zone.setEnabled(not self._busy)
+            self.clear_btn.setEnabled(not self._busy)
+
+    def _reset_progress_idle(self) -> None:
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setFormat("")
+        self.progress.setTextVisible(False)
 
     def _build(self) -> None:
         root = QWidget()
@@ -454,6 +536,9 @@ class MainWindow(QMainWindow):
         return paths
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._warming_up:
+            event.ignore()
+            return
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             self.drop_zone.set_hover(True)
@@ -461,6 +546,9 @@ class MainWindow(QMainWindow):
             event.ignore()
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if self._warming_up:
+            event.ignore()
+            return
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
         else:
@@ -543,6 +631,9 @@ class MainWindow(QMainWindow):
         self.open_after_box.setChecked(self._setting_bool("open_after"))
 
     def _add_paths(self, paths: List[Path]) -> None:
+        if self._warming_up:
+            self._append_log("正在加载转换组件，请稍候再拖入文件")
+            return
         if self._busy:
             self._append_log("正在导出，请等待结束后再加入文件")
             return
@@ -600,12 +691,17 @@ class MainWindow(QMainWindow):
             self.queue_label.setText(f"日志 · 队列 {count} 个文件")
         else:
             self.queue_label.setText("日志")
-        self.start_btn.setEnabled(count > 0 and not self._busy and not self._recognizing)
+        self.start_btn.setEnabled(
+            count > 0 and not self._busy and not self._recognizing and not self._warming_up
+        )
 
     def _append_log(self, message: str) -> None:
         self.log.append(message)
 
     def _start(self) -> None:
+        if self._warming_up:
+            self._append_log("正在加载转换组件，请稍候再导出")
+            return
         if self._busy or self._recognizing or self._thread is not None:
             return
         if not self._paths:
@@ -639,6 +735,7 @@ class MainWindow(QMainWindow):
         self._set_exporting(True)
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self._reset_progress_idle()
         self.progress.setValue(0)
         split_note = "，按页分割" if split else ""
         self._append_log(f"开始导出 {kind.label}{split_note}  →  {outdir}")
@@ -903,18 +1000,6 @@ def open_local_dir(path: Path) -> bool:
     return bool(QDesktopServices.openUrl(QUrl.fromLocalFile(target)))
 
 
-def _warmup_convert() -> None:
-    try:
-        import convert  # noqa: F401
-    except Exception:
-        pass
-
-
-def start_convert_warmup() -> None:
-    thread = threading.Thread(target=_warmup_convert, name="warmup-convert", daemon=True)
-    thread.start()
-
-
 def main() -> int:
     if "--cli" in sys.argv or "-h" in sys.argv or "--help" in sys.argv:
         # 命令行才加载转换库；窗口启动走轻量路径。
@@ -934,7 +1019,11 @@ def main() -> int:
     app.setStyleSheet(STYLESHEET)
     window = MainWindow()
     window.show()
-    start_convert_warmup()
+    window.raise_()
+    window.activateWindow()
+    QApplication.processEvents()
+    window.finish_startup()
+    window.begin_engine_warmup()
     return qt_exec(app)
 
 

@@ -2,21 +2,6 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
-if exist "发布\设计底稿导出-1.2.0\设计底稿导出.exe" (
-  start "" "发布\设计底稿导出-1.2.0\设计底稿导出.exe"
-  exit /b 0
-)
-
-if exist "发布\设计底稿导出-1.1.0\设计底稿导出.exe" (
-  start "" "发布\设计底稿导出-1.1.0\设计底稿导出.exe"
-  exit /b 0
-)
-
-if exist "发布\设计底稿导出-1.0.0\设计底稿导出.exe" (
-  start "" "发布\设计底稿导出-1.0.0\设计底稿导出.exe"
-  exit /b 0
-)
-
 set "PY="
 if exist ".venv38\Scripts\python.exe" set "PY=.venv38\Scripts\python.exe"
 if not defined PY if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"

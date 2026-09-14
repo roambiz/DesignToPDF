@@ -39,22 +39,22 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if exist "发布\设计底稿导出-1.2.0" rmdir /s /q "发布\设计底稿导出-1.2.0"
-mkdir "发布\设计底稿导出-1.2.0"
-copy /y "发布\DesignToPDF.exe" "发布\设计底稿导出-1.2.0\设计底稿导出.exe" >nul
-copy /y "分发说明.txt" "发布\设计底稿导出-1.2.0\请先读我.txt" >nul
+if exist "发布\设计底稿导出-1.2.1" rmdir /s /q "发布\设计底稿导出-1.2.1"
+mkdir "发布\设计底稿导出-1.2.1"
+copy /y "发布\DesignToPDF.exe" "发布\设计底稿导出-1.2.1\设计底稿导出.exe" >nul
+copy /y "分发说明.txt" "发布\设计底稿导出-1.2.1\请先读我.txt" >nul
 del /f /q "发布\DesignToPDF.exe" >nul 2>&1
 del /f /q "发布\设计底稿导出.exe" >nul 2>&1
-if exist "发布\设计底稿导出-1.2.0.zip" del /f /q "发布\设计底稿导出-1.2.0.zip"
-powershell -NoProfile -Command "Compress-Archive -LiteralPath '发布\设计底稿导出-1.2.0\设计底稿导出.exe','发布\设计底稿导出-1.2.0\请先读我.txt' -DestinationPath '发布\设计底稿导出-1.2.0.zip' -Force"
+if exist "发布\设计底稿导出-1.2.1.zip" del /f /q "发布\设计底稿导出-1.2.1.zip"
+powershell -NoProfile -Command "Compress-Archive -LiteralPath '发布\设计底稿导出-1.2.1\设计底稿导出.exe','发布\设计底稿导出-1.2.1\请先读我.txt' -DestinationPath '发布\设计底稿导出-1.2.1.zip' -Force"
 if errorlevel 1 (
   echo 压缩包生成失败，仍可单独发送 exe。
 )
 
 echo.
 echo 打包完成（Win7-Win11 通用）：
-echo   微信请发：发布\设计底稿导出-1.2.0.zip
-echo   本机自用：发布\设计底稿导出-1.2.0\设计底稿导出.exe
+echo   微信请发：发布\设计底稿导出-1.2.1.zip
+echo   本机自用：发布\设计底稿导出-1.2.1\设计底稿导出.exe
 echo 请先保存到桌面再打开。不要在微信里直接点开。
 echo.
 pause
